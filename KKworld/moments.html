@@ -1,0 +1,58 @@
+<!-- channels.html (频道页模板) -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>动态</title>
+    <!-- 注意：它链接的是我们刚创建的 channels_style.css -->
+    <link rel="stylesheet" href="channels_style.css">
+    <!-- 同时，它也需要借用一下大厅的样式来统一风格 -->
+    <link rel="stylesheet" href="qq_lobby_style.css">
+</head>
+<body>
+
+<div id="heads-up-notification" class="heads-up-notification">
+    <img src="" class="sender-avatar" alt="">
+    <div class="notification-content">
+        <div class="sender-name"></div>
+        <div class="message-preview"></div>
+    </div>
+</div>
+
+<div class="qq-container">
+    <!-- 这是一个临时的页面标题 -->
+    <header class="top-bar"><h1 style="font-size: 18px; margin: 0 auto;">动态</h1></header>
+
+    <!-- 页面主要内容 -->
+    <main class="message-list">
+        <p class="empty-message">这里是“频道”页面，未来会做成公共论坛！</p>
+    </main>
+
+    <!-- 底部导航栏 (注意高亮位置的变化！) -->
+    <footer class="bottom-nav">
+        <a href="chat.html" class="nav-item">消息</a>
+        <a href="channels.html" class="nav-item">频道</a>
+        <a href="contacts.html" class="nav-item">联系人</a>
+        <a href="moments.html" class="nav-item active">动态</a> <!-- 是高亮状态 -->
+    </footer>
+</div>
+
+<script src="main.js"></script>
+
+<script>
+    const testButton = document.createElement('button');
+    testButton.textContent = '模拟消息';
+    testButton.style.position = 'fixed';
+    testButton.style.bottom = '100px';
+    testButton.style.right = '20px';
+    testButton.style.zIndex = '1000';
+    testButton.style.padding = '10px';
+    testButton.style.border = '1px solid #ccc';
+    testButton.style.borderRadius = '8px';
+    testButton.style.cursor = 'pointer';
+    testButton.onclick = simulateIncomingMessage;
+    document.body.appendChild(testButton);
+</script>
+</body>
+</html>
