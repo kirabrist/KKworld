@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>聊天</title>
+    <link rel="stylesheet" href="conversation_style.css">
+</head>
+<body>
+    <div class="chat-container">
+        <header class="header">
+            <a href="chat.html" class="back-button"><</a>
+            <div class="friend-info"><span id="friend-name" class="name">加载中...</span><span id="status-indicator" class="status">🟢 在线</span></div>
+            <img src="images/menu_icon.svg" class="more-options" alt="更多">
+        </header>
+        <main id="message-area" class="message-area"></main>
+        <div class="input-area">
+            <textarea id="message-input" placeholder="输入消息..." rows="1"></textarea>
+            <button id="transmit-button" title="发送给AI进行回复"><img src="images/transmit_icon.svg" alt="传输"></button>
+            <button id="send-button">发送</button>
+        </div>
+        <footer class="action-bar"><img id="voice-message-btn" src="images/mic_icon.svg" alt="语音"><img id="image-message-btn" src="images/image_icon.svg" alt="图片"><img id="camera-message-btn" src="images/camera_icon.svg" alt="相机"><img id="transfer-btn" src="images/wallet_icon.svg" alt="转账"><img id="emoji-btn" src="images/emoji_icon.svg" alt="表情"><img id="plus-icon" src="images/plus_icon.svg" alt="更多功能"></footer>
+        <div id="sticker-panel" class="sticker-panel"><div class="sticker-panel-header"><span>表情包</span><div><button id="add-sticker-btn">添加</button> <button id="close-sticker-panel-btn">关闭</button></div></div><div id="sticker-grid" class="sticker-grid"></div></div>
+        <input type="file" id="image-uploader" accept="image/*" style="display: none;"><input type="file" id="sticker-uploader" accept="image/*" style="display: none;">
+        <div id="transfer-modal" class="modal-overlay"><div class="modal-content"><h2 id="transfer-title">转账</h2><div class="transfer-form-group"><label for="transfer-amount-input">转账金额</label><input type="number" id="transfer-amount-input" placeholder="0.00" step="0.01"><div id="transfer-error" class="error-message"></div></div><div class="transfer-form-group"><label for="transfer-remark-input">备注 (最多20字)</label><input type="text" id="transfer-remark-input" maxlength="20"></div><div class="modal-actions"><button id="cancel-transfer-btn">取消</button><button id="confirm-transfer-btn" disabled>转账</button></div></div></div>
+    </div>
+    <script>
+        (function() {
+            const friendNameElement = document.getElementById('friend-name');
+            const statusIndicator = document.getElementById('status-indicator');
+            const messageArea = document.getElementById('message-area');
+            const messageInput = document.getElementById('message-input');
+            const sendButton = document.getElementById('send-button');
+            const transmitButton = document.getElementById('transmit-button');
+            const voiceMessageBtn = document.getElementById('voice-message-btn');
+            const imageMessageBtn = document.getElementById('image-message-btn');
+            const cameraMessageBtn = document.getElementById('camera-message-btn');
+            const imageUploader = document.getElementById('image-uploader');
+            const transferBtn = document.getElementById('transfer-btn');
+            const transferModal = document.getElementById('transfer-modal');
+            const transferTitle = document.getElementById('transfer-title');
+            const transferAmountInput = document.getElementById('transfer-amount-input');
+            const transferRemarkInput = document.getElementById('transfer-remark-input');
+            const confirmTransferBtn = document.getElementById('confirm-transfer-btn');
+            const cancelTransferBtn = document.getElementById('cancel-transfer-btn');
+            const transferError = document.getElementById('transfer-error');
+            const emojiBtn = document.getElementById('emoji-btn');
+            const stickerPanel = document.getElementById('sticker-panel');
+            const stickerGrid = document.getElementById('sticker-grid');
+            const addStickerBtn = document.getElementById('add-sticker-btn');
+            const closeStickerPanelBtn = document.getElementById('close-sticker-panel-btn');
+            const stickerUploader = document.getElementById('sticker-uploader');
+            let friendData = {}; let userData = {}; let friendId = null; let userStickers = [];
+
+            const DBHelper = { db: null, openDB: function() { return new Promise((resolve, reject) => { if (this.db) { return resolve(this.db); } const request = indexedDB.open('ChatDatabase', 2); request.onerror = (event) => reject("数据库错误: " + event.target.errorCode); request.onsuccess = (event) => { this.db = event.target.result; resolve(this.db); }; request.onupgradeneeded = (event) => { const db = event.target.result; if (!db.objectStoreNames.contains('conversations')) { const store = db.createObjectStore('conversations', { keyPath: 'id', autoIncrement: true }); store.createIndex('conversationId', 'conversationId', { unique: false }); }}; }); }, addMessage: async function(conversationId, message) { const db = await this.openDB(); return new Promise((resolve, reject) => { const transaction = db.transaction(['conversations'], 'readwrite'); const store = transaction.objectStore('conversations'); message.conversationId = conversationId; const request = store.add(message); request.onsuccess = resolve; request.onerror = (event) => reject("添加消息失败: " + event.target.error); }); }, getMessages: async function(conversationId) { const db = await this.openDB(); return new Promise((resolve, reject) => { const transaction = db.transaction(['conversations'], 'readonly'); const store = transaction.objectStore('conversations'); const index = store.index('conversationId'); const request = index.getAll(conversationId); request.onsuccess = () => resolve(request.result.sort((a,b) => a.timestamp - b.timestamp)); request.onerror = (event) => reject("获取消息失败: " + event.target.error); }); } };
+
+            async function getAIResponse(chatHistory, apiKey, apiEndpoint, apiModel) {
+                const textHistory = chatHistory.filter(msg => msg.type === 'text');
+                if (textHistory.length === 0) return "(当前没有可供AI理解的文本消息。)";
+                const messagesForAI = textHistory.map(msg => ({ role: msg.sender === 'me' ? 'user' : 'assistant', content: msg.content }));
+                statusIndicator.textContent = '对方正在输入...';
+                try {
+                    const response = await fetch(apiEndpoint, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+                        body: JSON.stringify({ model: apiModel, messages: messagesForAI })
+                    });
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.error?.message || `HTTP ${response.status}`);
+                    }
+                    const data = await response.json();
+                    return data.choices[0].message.content;
+                } catch (error) {
+                    console.error('调用AI失败:', error);
+                    return `(抱歉，AI连接出现问题: ${error.message})`;
+                } finally {
+                    statusIndicator.textContent = '🟢 在线';
+                }
+            }
+            async function initializeChat() { const params = new URLSearchParams(window.location.search); friendId = params.get('friendId'); if (!friendId) { friendNameElement.textContent = '错误：未找到好友'; return; } const allFriends = JSON.parse(localStorage.getItem('friends')) || []; friendData = allFriends.find(f => f.id === friendId); if (!friendData) { friendNameElement.textContent = '错误：好友不存在'; return; } userData.avatar = localStorage.getItem('userAvatar') || 'images/default_avatar.png'; friendNameElement.textContent = friendData.nickname || friendData.name; document.title = `与 ${friendNameElement.textContent} 的聊天`; loadUserStickers(); await renderMessages(); }
+            async function renderMessages() { messageArea.innerHTML = ''; try { const conversationHistory = await DBHelper.getMessages(friendId); conversationHistory.forEach(msg => appendMessageToUI(msg)); } catch (error) { console.error("渲染消息失败:", error); } messageArea.scrollTop = messageArea.scrollHeight; }
+            function appendMessageToUI(msg) { const messageWrapper = document.createElement('div'); messageWrapper.className = 'message-wrapper'; const messageDiv = document.createElement('div'); messageDiv.className = 'message'; const avatarImg = document.createElement('img'); avatarImg.className = 'avatar'; if (msg.type === 'text') { messageDiv.classList.add('text'); messageDiv.innerHTML = `<p>${msg.content}</p>`; } else if (msg.type === 'voice') { messageDiv.classList.add('voice'); const waveHTML = `<div class="sound-waves"><span class="bar" style="height: 60%;"></span><span class="bar" style="height: 100%;"></span><span class="bar" style="height: 80%;"></span><span class="bar" style="height: 40%;"></span></div>`; messageDiv.innerHTML = `<div class="voice-display"><svg class="play-icon-svg" viewBox="0 0 8 12"><path d="M0 12L10 6L0 0V12Z"/></svg>${waveHTML}<span class="duration">${msg.duration}"</span></div><div class="transcribed-text"><div class="text-content">${msg.content}</div><div class="collapse-arrow">^</div></div>`; messageDiv.onclick = function() { this.classList.toggle('is-transcribed'); }; } else if (msg.type === 'image') { messageDiv.classList.add('image'); if (msg.content instanceof Blob) { const imageUrl = URL.createObjectURL(msg.content); messageDiv.innerHTML = `<img src="${imageUrl}" alt="发送的图片">`; } } else if (msg.type === 'camera') { messageDiv.classList.add('camera'); messageDiv.innerHTML = `<div class="camera-placeholder"><p>[${msg.content}]</p></div>`; } else if (msg.type === 'transfer') { messageDiv.classList.add('transfer'); const remarkText = msg.content.remark ? msg.content.remark : '转账'; messageDiv.innerHTML = `<div class="transfer-content"><div class="transfer-header"><span>💰</span><span>转账给 ${friendData.nickname || friendData.name}</span></div><div class="transfer-amount"><small>¥</small>${msg.content.amount}</div><div class="transfer-remark">${remarkText}</div></div><div class="transfer-footer">哈基米OS 转账</div>`; } else if (msg.type === 'sticker') { messageDiv.classList.add('sticker'); messageDiv.innerHTML = `<img src="${msg.content}" alt="表情包">`; } if (msg.sender === 'me') { messageWrapper.classList.add('sent'); avatarImg.src = userData.avatar; messageWrapper.appendChild(messageDiv); messageWrapper.appendChild(avatarImg); } else { messageWrapper.classList.add('received'); avatarImg.src = friendData.avatar || 'images/default_avatar.png'; messageWrapper.appendChild(avatarImg); messageWrapper.appendChild(messageDiv); } messageArea.appendChild(messageWrapper); messageArea.scrollTop = messageArea.scrollHeight; }
+            async function sendMessageToScreen(msgObject) { await DBHelper.addMessage(friendId, msgObject); let lastMessageText; if (msgObject.type === 'text') { lastMessageText = msgObject.content; } else { lastMessageText = `[${{voice: '语音', image: '图片', camera: '照片', transfer: '转账', sticker: '表情'}[msgObject.type]}]`; } updateConversationList(lastMessageText, msgObject.sender); appendMessageToUI(msgObject); }
+            function handleTextInput() { const text = messageInput.value.trim(); if (text === '') return; const newMessage = { sender: 'me', content: text, type: 'text', timestamp: Date.now() }; sendMessageToScreen(newMessage); messageInput.value = ''; messageInput.style.height = 'auto'; messageInput.focus(); }
+            async function handleTransmitToAI() { const apiEndpoint = localStorage.getItem('hakimi-os-api-endpoint'); const apiKey = localStorage.getItem('hakimi-os-api-key'); const apiModel = localStorage.getItem('hakimi-os-api-model'); if (!apiEndpoint || !apiKey || !apiModel) { await sendMessageToScreen({ sender: 'friend', content: '(错误: 未在主屏幕设置中完整配置AI参数。)', type: 'text', timestamp: Date.now() }); return; } const history = await DBHelper.getMessages(friendId); const aiReplyText = await getAIResponse(history, apiKey, apiEndpoint, apiModel); const aiMessage = { sender: 'friend', content: aiReplyText, type: 'text', timestamp: Date.now() }; await sendMessageToScreen(aiMessage); }
+            function handleVoiceInput() { const text = prompt("请输入要转为语音的消息内容："); if (text && text.trim() !== '') { const duration = Math.max(1, Math.round(text.length / 4)); const newMessage = { sender: 'me', content: text.trim(), type: 'voice', duration: duration, timestamp: Date.now() }; sendMessageToScreen(newMessage); } }
+            function handleImageUpload(event) { const file = event.target.files[0]; if (!file) return; const newMessage = { sender: 'me', content: file, type: 'image', timestamp: Date.now() }; sendMessageToScreen(newMessage); event.target.value = ''; }
+            function handleCameraInput() { const text = prompt("请简短描述您“拍摄”的照片："); if (text && text.trim() !== '') { const newMessage = { sender: 'me', content: text.trim(), type: 'camera', timestamp: Date.now() }; sendMessageToScreen(newMessage); } }
+            function handleTransferInput() { transferTitle.textContent = `转账给 ${friendData.nickname || friendData.name}`; transferModal.style.display = 'flex'; }
+            function handleConfirmTransfer() { const amount = parseFloat(transferAmountInput.value); const remark = transferRemarkInput.value.trim(); const newMessage = { sender: 'me', content: { amount: amount.toFixed(2), remark: remark || ' ' }, type: 'transfer', timestamp: Date.now() }; sendMessageToScreen(newMessage); transferModal.style.display = 'none'; transferAmountInput.value = ''; transferRemarkInput.value = ''; }
+            function validateTransferAmount() { const amount = parseFloat(transferAmountInput.value); if (isNaN(amount) || amount <= 0) { transferError.textContent = '金额必须大于0'; confirmTransferBtn.disabled = true; } else if (amount > 50000) { transferError.textContent = '单笔转账金额不能超过50,000'; confirmTransferBtn.disabled = true; } else { transferError.textContent = ''; confirmTransferBtn.disabled = false; } }
+            function updateConversationList(lastMessage, sender) { let conversations = JSON.parse(localStorage.getItem('conversations')) || []; const conversationIndex = conversations.findIndex(c => !c.isGroup && c.friendId === friendId); if (conversationIndex > -1) { const prefix = sender === 'me' ? '[我]: ' : ''; conversations[conversationIndex].lastMessage = prefix + lastMessage; conversations[conversationIndex].time = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }); const itemToMove = conversations.splice(conversationIndex, 1)[0]; conversations.unshift(itemToMove); localStorage.setItem('conversations', JSON.stringify(conversations)); } }
+            function loadUserStickers() { userStickers = JSON.parse(localStorage.getItem('userStickers')) || []; }
+            function saveUserStickers() { localStorage.setItem('userStickers', JSON.stringify(userStickers)); }
+            function renderStickerGrid() { stickerGrid.innerHTML = ''; userStickers.forEach(stickerSrc => { const stickerItem = document.createElement('div'); stickerItem.className = 'sticker-item'; stickerItem.innerHTML = `<img src="${stickerSrc}" alt="sticker">`; stickerItem.onclick = () => { sendSticker(stickerSrc); }; stickerGrid.appendChild(stickerItem); }); }
+            function handleAddSticker() { const choice = confirm("添加网络图片吗？ (点'取消'以上传本地文件)"); if (choice) { const url = prompt("请输入图片链接 (URL):"); if (url) { userStickers.push(url); saveUserStickers(); renderStickerGrid(); } } else { stickerUploader.click(); } }
+            function handleStickerUpload(event) { const file = event.target.files[0]; if (!file) return; const reader = new FileReader(); reader.onload = (e) => { userStickers.push(e.target.result); saveUserStickers(); renderStickerGrid(); }; reader.readAsDataURL(file); event.target.value = ''; }
+            function sendSticker(src) { const newMessage = { sender: 'me', content: src, type: 'sticker', timestamp: Date.now() }; sendMessageToScreen(newMessage); stickerPanel.style.display = 'none'; }
+            sendButton.addEventListener('click', handleTextInput); transmitButton.addEventListener('click', handleTransmitToAI); voiceMessageBtn.addEventListener('click', handleVoiceInput); imageMessageBtn.addEventListener('click', () => imageUploader.click()); imageUploader.addEventListener('change', handleImageUpload); cameraMessageBtn.addEventListener('click', handleCameraInput); transferBtn.addEventListener('click', handleTransferInput); cancelTransferBtn.addEventListener('click', () => { transferModal.style.display = 'none'; }); confirmTransferBtn.addEventListener('click', handleConfirmTransfer); emojiBtn.addEventListener('click', () => { renderStickerGrid(); stickerPanel.style.display = 'flex'; }); closeStickerPanelBtn.addEventListener('click', () => { stickerPanel.style.display = 'none'; }); addStickerBtn.addEventListener('click', handleAddSticker); stickerUploader.addEventListener('change', handleStickerUpload); transferAmountInput.addEventListener('input', validateTransferAmount); messageInput.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleTextInput(); } });
+            messageInput.addEventListener('input', () => { messageInput.style.height = 'auto'; messageInput.style.height = (messageInput.scrollHeight) + 'px'; sendButton.classList.toggle('active', messageInput.value.trim() !== ''); });
+            initializeChat();
+        })();
+    </script>
+</body>
+</html>
