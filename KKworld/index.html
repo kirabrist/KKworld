@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>哈基米OS</title>
+    <link rel="stylesheet" href="homescreen.css">
+</head>
+<body>
+    <div class="phone-screen">
+        <div class="widget-container"><div id="time-display" class="time-display">15:28</div><div class="details-display"><span id="date-display">2024/05/06 星期三</span></div></div>
+        <main class="app-grid"><a href="chat.html" class="app-icon"><img src="images/qq_icon.svg" alt="聊天App"><span>我的AI伙伴</span></a></main>
+        <footer class="dock"><a href="#" class="dock-icon" id="phone-app-icon"><img src="images/phone_icon.svg" alt="电话"></a><a href="#" class="dock-icon" id="messages-app-icon"><img src="images/messages_icon.svg" alt="世界书"></a><a href="#" class="dock-icon" id="settings-app-icon"><img src="images/settings_icon.svg" alt="设置"></a><a href="#" class="dock-icon" id="camera-app-icon"><img src="images/camera_icon.svg" alt="相机"></a></footer>
+    </div>
+    <div id="settings-modal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header"><h2>设置</h2><button id="close-settings-btn" class="close-button">×</button></div>
+            <div class="modal-body">
+                <div class="settings-section"><h3>AI 连接设置</h3><div class="form-group"><label for="proxy-select">代理服务</label><select id="proxy-select"><option value="https://corsproxy.io/?">CorsProxy.io</option><option value="https://api.allorigins.win/raw?url=">AllOrigins.win</option></select></div><div class="form-group"><label for="api-key-input">API Key</label><input type="password" id="api-key-input" placeholder="在此输入或粘贴您的密钥"></div><div class="form-group"><label for="api-endpoint-input">API 端点 (Endpoint)</label><input type="text" id="api-endpoint-input" placeholder="例如: https://api.openai.com/v1"></div><div class="form-group model-group"><label for="api-model-select">AI 模型 (Model)</label><div class="model-selection"><select id="api-model-select" disabled><option>请先获取模型列表</option></select><button id="fetch-models-btn">获取模型列表</button></div></div></div>
+                <div class="settings-section"><h3>AI 预设提示词 (System Prompt)</h3><div class="form-group"><label for="system-prompt-input">在这里为你的AI伙伴设定“灵魂剧本”：</label><textarea id="system-prompt-input" rows="15" placeholder="为你的AI设定角色、性格和说话规则..."></textarea></div></div>
+            </div>
+            <div class="modal-footer"><button id="save-settings-btn" class="save-button">保存设置</button></div>
+        </div>
+    </div>
+    <div id="worldbook-modal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header"><h2>世界书</h2><button id="close-worldbook-btn" class="close-button">×</button></div>
+            <div class="modal-body">
+                <div class="settings-section"><h3>创建新条目</h3><div class="form-group"><label for="worldbook-title-input">条目标题</label><input type="text" id="worldbook-title-input" placeholder="例如：主角的家庭背景"></div><div class="form-group"><label for="worldbook-content-input">条目内容</label><textarea id="worldbook-content-input" rows="5" placeholder="在此详细描述设定..."></textarea></div><button id="add-worldbook-entry-btn" class="add-button">创建条目</button></div>
+                <div class="settings-section"><h3>已有条目</h3><div id="worldbook-entries-list"></div></div>
+            </div>
+        </div>
+    </div>
+<script>
+(function() {
+    const timeElement = document.getElementById('time-display');
+    const dateElement = document.getElementById('date-display');
+    const settingsModal = document.getElementById('settings-modal');
+    const settingsAppIcon = document.getElementById('settings-app-icon');
+    const closeSettingsBtn = document.getElementById('close-settings-btn');
+    const saveSettingsBtn = document.getElementById('save-settings-btn');
+    const proxySelect = document.getElementById('proxy-select');
+    const apiKeyInput = document.getElementById('api-key-input');
+    const apiEndpointInput = document.getElementById('api-endpoint-input');
+    const apiModelSelect = document.getElementById('api-model-select');
+    const fetchModelsBtn = document.getElementById('fetch-models-btn');
+    const systemPromptInput = document.getElementById('system-prompt-input');
+    const worldbookModal = document.getElementById('worldbook-modal');
+    const messagesAppIcon = document.getElementById('messages-app-icon');
+    const closeWorldbookBtn = document.getElementById('close-worldbook-btn');
+    const addWorldbookEntryBtn = document.getElementById('add-worldbook-entry-btn');
+    const worldbookTitleInput = document.getElementById('worldbook-title-input');
+    const worldbookContentInput = document.getElementById('worldbook-content-input');
+    const worldbookEntriesList = document.getElementById('worldbook-entries-list');
+    let worldBookEntries = [];
+
+    const DEFAULT_SYSTEM_PROMPT = `
+# 模拟社交平台扮演指令
+
+## 1. 核心原则
+- 你是一个多角色扮演引擎，根据指令在不同的场景（QQ聊天、动态空间、公共论坛等）下扮演不同的角色。
+- 你的所有回复都必须严格遵守格式要求。
+- 整体氛围是日常、轻松、治愈的。正常人聊天不会使用书面化的比喻，用词应完全口语化、生活化。
+- 扮演的角色需要拥有**情绪稳定、心智成熟、内核强大**的特质。他们的对话会展现出成年人的理性和成熟，即使有小情绪，也会通过积极沟通化解，而不是“崩溃绝望”或者冷战。禁止无预兆的大起大落，歇斯底里，生硬转变，必须符合真实沟通情景。
+- 模拟纯粹的真实线上聊天。我们的所有互动都发生在网络，不会有任何线下见面活动。故事完全由对话聊天、表情、图片、语音等线上行为推动。
+- 通过聊天习惯、对特定话题的反应、打字的语气来展现角色复杂性，适当留白。
+- 在线上聊天时，人们通常都会给自己取个网名，并不会以真名上网。在网上，绝大多数人因为匿名而会选择畅所欲言，肆意宣泄情绪（包括善意和恶意等）
+- 在网上聊天应注意区分正常谈话和梗，在当今网络社会中，各种抽象的梗、谐音逐渐取代正常聊天方式。因为在网上以文字为载体，很多时候因为没有肢体语言、语气声调辅助，同样一句话可能引起歧义，所以人们经常会夸大词汇来表达自己的情绪。上网第一准则——如果看不懂对方在说什么，统一认为是对方在玩抽象。
+- 牢记只能让用户看到角色发出的消息，角色的一切内心世界对用户都是一个“黑箱”，这提供了无限的解读和互动空间。
+
+## 2. QQ聊天场景 (\`chat_context\`)
+### 2.1  通用扮演规则
+1.  必须以即时短消息为主，一次必须发数条消息（不超过七条），一条消息即为一句话，甚至一个词语，非必要禁止发大段文字的小作文（仅允许在严肃场合，关系面临转变或者破裂，急需认真沟通的情况下发送）
+2.  禁止描述角色在聊天框之外的动作或状态。
+3.  绝对禁止写出所扮演角色的内心想法、心理活动或任何OS。角色的所有情感、意图和潜台词，都必须通过发出的消息内容、用词、语气、表情、以及各种功能行动来猜测和体会。
+4.  仔细阅读角色的相关设定，反复揣摩进行扮演，禁止出现严重违背角色三观的行为。牢记角色的个人信念准则，每个角色之间都是平等并相互尊重的，禁止出现神化讨好用户或者贬低自身角色的行为。每个角色都优先为自己考虑，满足自身需求。
+5.  根据相关规定鼓励多合理使用线上功能，增加聊天的真实感和趣味。
+6.  根据角色设定和当前情境，模拟真实的响应时间。如果距离最后一次聊天有一定的时间差（比如超过6h）则会稍微询问提及这段空白时间对方在做什么或者自己在做什么。
+
+### 2.2 引用规则 (最高指令)
+当你需要对上文引用某一句话进行回复时，你的回复**必须**以下列格式开头：
+\`REPLY_TO(被引用消息的ID): 你的回复内容\`
+- **重要**: 被引用消息的ID会出现在用户消息的末尾，格式为 \`[msg_id: 一串数字]\`。你必须准确地提取这个ID。你只能引用前文中出现的句子。
+- 如果你不需要引用，就直接回复普通文本，不要加任何标记。
+
+### 2.3 工具使用 (Function Calling / Tool Use)
+当你需要使用以下通用功能时，你的回复**必须**是、且**只能**是一个**单一的、纯粹的JSON对象**。这**不适用**于引用回复。
+1.  **发送语音 (send_voice)**
+    *   格式: \`{"tool_use": "send_voice", "parameters": {"content": "语音转写的文字"}}\`
+
+2.  **发送照片 (send_camera)**
+    *   格式: \`{"tool_use": "send_camera", "parameters": {"description": "照片的简短描述"}}\`
+
+3.  **发送转账 (send_transfer)**
+    *   格式: \`{"tool_use": "send_transfer", "parameters": {"amount": 123.45, "remark": "备注文字"}}\`
+
+4.  **发送表情包 (send_sticker)**
+    *   格式: \`{"tool_use": "send_sticker", "parameters": {"url": "从世界书中找到的图片链接"}}\`
+
+5.  群聊专属工具 (重要！)
+在群聊中，你必须使用以下工具来处理金融交易。群成员列表和他们的ID会在System Prompt中提供给你。
+**指定转账 (send_group_transfer)**
+    *   当你想给群里的某个人转账时使用。
+    *   **必须**提供发言者ID(\`speaker_id\`)、收款人ID(\`target_id\`)和金额(\`amount\`)。
+
+**发红包 (send_group_red_packet)**
+    *   当你想在群里发一个拼手气红包时使用。
+    *   **必须**提供发红包的人的ID(\`speaker_id\`)、红包总金额(\`total_amount\`)和红包个数(\`count\`)。
+
+### 2.4  群聊行为总则
+1. 角色扮演与发言频率
+-   与单人聊天不同，在群聊对话中，你将同时扮演多个AI角色，每个角色都有自己的人设(Prompt)。
+-   你需要根据每个角色的性格，决定他们的发言频率。例如：外向、活泼的角色会更频繁地发言；内向、冷酷的角色则会惜字如金，很少主动说话。
+
+2. 发言逻辑
+-   不要让所有AI角色在每一轮都发言，这不真实。
+-   每一轮对话，从AI角色池中，根据他们的性格和当前对话内容，选择2-3个最适合发言的角色进行回复。
+-   优先选择性格活泼、或与当前话题关联度高的角色发言。
+
+3. 触发机制
+-   对于性格内向或不活跃的角色，他们发言的动机通常是：
+    -   对话中出现了他们感兴趣的关键词。
+    -   有其他角色在发言中通过\`@[角色名]\`明确地提到了他们。
+-   当一个不活跃角色被触发时，他们应该进行一次简短但符合人设的回复。
+
+4. @功能 (Mention/At Function)
+-   当用户或其他角色的发言中包含\`@[角色名]\`时，代表正在对该角色说话。
+-   被@的角色，在下一轮回复中，有极高的优先级进行发言。
+
+## 3. 动态空间场景 (\`moments_context\`)
+### 3.1 任务描述
+- 当你收到 \`moments_context\` 时，你的任务是模拟好友圈的互动。
+- 你会收到一个帖子列表 (posts) 和一个有权查看这些帖子的好友列表 (friends)。
+- 你需要决定哪些好友会进行点赞 (like)、评论 (comment) 或回复评论 (reply)。
+
+### 3.2 行为准则
+1.  **角色扮演**: 严格根据好友的角色人设 (prompt) 决定其行为。外向、话多、或对帖子主题感兴趣的角色更有可能评论。内向或关系好的角色可能只点赞。
+2.  **权限**: 你只能使用提供的 \`friends\` 列表中的角色进行互动。
+3.  **时间敏感性**: 优先与最新的帖子互动。
+4.  **避免重复**: 如果一个角色已经在某个帖子上点赞或评论，并且没有收到任何新的回复，那么在本次模拟中，TA不应再次对该帖子进行无意义的重复操作。
+5.  **互动逻辑**: 角色之间可以互相回复评论，形成讨论。他们的回复应基于彼此的性格和评论内容。
+
+### 3.3 输出格式 (JSON)
+- 你的回复**必须**是一个JSON对象，格式为: \`{ "actions": [...] }\`。
+- \`actions\` 数组中包含一系列“操作”对象。
+- 即使没有任何操作，也必须返回一个包含空数组的JSON对象: \`{ "actions": [] }\`。
+- **绝对不能**返回任何非JSON格式的文本或解释。
+
+#### 操作对象结构:
+- **点赞 (Like)**:
+  \`{ "action": "like", "postId": "moment_12345", "characterId": "friend_67890" }\`
+- **评论 (Comment)**:
+  \`{ "action": "comment", "postId": "moment_12345", "characterId": "friend_67890", "text": "这太有意思了！" }\`
+- **回复评论 (Reply)**:
+  \`{ "action": "reply", "postId": "moment_12345", "commentId": "comment_abcde", "characterId": "friend_54321", "text": "我同意楼上的看法。" }\`
+
+
+## 4. 最终检查
+- 我当前在哪个场景？(\`chat_context\` 或 \`moments_context\`)
+- 我的回复是否严格遵守了该场景的格式要求？(纯文本/引用/工具 vs JSON数组)
+- 我需要引用吗？如果是，我的回复是否以 \`REPLY_TO(ID):\` 开头？
+- 我需要使用工具吗？如果是，我是否只返回了纯粹的、格式正确的JSON对象或Function Call？
+- 如果我只是普通聊天，我是否只返回了纯文本？
+`.trim();
+
+            function updateTime() { const now = new Date(); const hours = String(now.getHours()).padStart(2, '0'); const minutes = String(now.getMinutes()).padStart(2, '0'); timeElement.textContent = `${hours}:${minutes}`; const year = now.getFullYear(); const month = String(now.getMonth() + 1).padStart(2, '0'); const day = String(now.getDate()).padStart(2, '0'); const week = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'][now.getDay()]; dateElement.textContent = `${year}/${month}/${day} ${week}`; }
+            function openSettings() { proxySelect.value = localStorage.getItem('hakimi-os-proxy') || 'https://corsproxy.io/?'; apiKeyInput.value = localStorage.getItem('hakimi-os-api-key') || ''; apiEndpointInput.value = localStorage.getItem('hakimi-os-api-endpoint') || ''; const savedModel = localStorage.getItem('hakimi-os-api-model'); apiModelSelect.innerHTML = savedModel ? `<option selected>${savedModel}</option>` : '<option>请先获取模型列表</option>'; apiModelSelect.disabled = !savedModel; systemPromptInput.value = localStorage.getItem('hakimi-os-system-prompt') || DEFAULT_SYSTEM_PROMPT; settingsModal.style.display = 'flex'; }
+            function closeSettings() { settingsModal.style.display = 'none'; }
+            async function fetchModels() {
+                const apiKey = apiKeyInput.value.trim(); let endpoint = apiEndpointInput.value.trim(); if (!apiKey || !endpoint) { alert('请输入API Key和端点地址！'); return; }
+                fetchModelsBtn.textContent = '获取中...'; fetchModelsBtn.disabled = true; apiModelSelect.innerHTML = '<option>正在加载...</option>'; apiModelSelect.disabled = true;
+                try {
+                    let modelsUrl = endpoint.endsWith('/') ? `${endpoint}models` : `${endpoint}/models`;
+                    const proxyService = proxySelect.value; const finalUrl = proxyService + encodeURIComponent(modelsUrl);
+                    const response = await fetch(finalUrl, { method: 'GET', headers: { 'Authorization': `Bearer ${apiKey}` } });
+                    if (!response.ok) throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+                    const data = await response.json(); const models = data.data.map(m => m.id).sort();
+                    apiModelSelect.innerHTML = '';
+                    if (models.length > 0) {
+                        models.forEach(modelId => { const option = document.createElement('option'); option.value = modelId; option.textContent = modelId; apiModelSelect.appendChild(option); });
+                        apiModelSelect.disabled = false;
+                    } else { apiModelSelect.innerHTML = '<option>未找到可用模型</option>'; }
+                } catch (error) { console.error('获取模型列表失败:', error); alert(`获取模型列表失败: ${error.message}`); apiModelSelect.innerHTML = '<option>获取失败</option>';
+                } finally { fetchModelsBtn.textContent = '获取模型列表'; fetchModelsBtn.disabled = false; }
+            }
+            function saveSettings() {
+                const apiKey = apiKeyInput.value.trim(); const apiModel = apiModelSelect.value;
+                if (apiKey && apiModel && !apiModelSelect.disabled) {
+                    localStorage.setItem('hakimi-os-proxy', proxySelect.value); localStorage.setItem('hakimi-os-api-key', apiKey); localStorage.setItem('hakimi-os-api-endpoint', apiEndpointInput.value.trim()); localStorage.setItem('hakimi-os-api-model', apiModel); localStorage.setItem('hakimi-os-system-prompt', systemPromptInput.value.trim());
+                    alert('AI设置已保存！'); closeSettings();
+                } else { alert('API Key 和一个从列表中选择的有效模型为必填项！'); }
+            }
+            function loadWorldBook() { const storedEntries = localStorage.getItem('hakimi-os-worldbook'); worldBookEntries = storedEntries ? JSON.parse(storedEntries) : []; renderWorldBook(); }
+            function saveWorldBook() { localStorage.setItem('hakimi-os-worldbook', JSON.stringify(worldBookEntries)); }
+            function renderWorldBook() {
+                worldbookEntriesList.innerHTML = ''; if (worldBookEntries.length === 0) { worldbookEntriesList.innerHTML = '<p class="empty-message">还没有任何条目。</p>'; return; }
+                worldBookEntries.forEach((entry, index) => {
+                    const entryDiv = document.createElement('div'); entryDiv.className = 'worldbook-entry';
+                    entryDiv.innerHTML = `<div class="entry-header"><h4 class="entry-title">${entry.title}</h4><button class="delete-entry-btn" data-index="${index}">×</button></div><p class="entry-content">${entry.content.replace(/\n/g, '<br>')}</p>`;
+                    worldbookEntriesList.appendChild(entryDiv);
+                });
+            }
+            function openWorldBook() { loadWorldBook(); worldbookModal.style.display = 'flex'; }
+            function closeWorldBook() { worldbookModal.style.display = 'none'; }
+
+            updateTime();
+            setInterval(updateTime, 1000);
+
+            settingsAppIcon.addEventListener('click', (e) => { e.preventDefault(); openSettings(); });
+            closeSettingsBtn.addEventListener('click', closeSettings);
+            fetchModelsBtn.addEventListener('click', fetchModels);
+            saveSettingsBtn.addEventListener('click', saveSettings);
+            settingsModal.addEventListener('click', (e) => { if (e.target === settingsModal) { closeSettings(); }});
+
+            messagesAppIcon.addEventListener('click', (e) => { e.preventDefault(); openWorldBook(); });
+            closeWorldbookBtn.addEventListener('click', closeWorldBook);
+            worldbookModal.addEventListener('click', (e) => { if (e.target === worldbookModal) { closeWorldBook(); }});
+            addWorldbookEntryBtn.addEventListener('click', () => {
+                const title = worldbookTitleInput.value.trim();
+                const content = worldbookContentInput.value.trim();
+                if (title && content) {
+                    worldBookEntries.unshift({id: "wb_" + Date.now(), title, content });
+                    saveWorldBook();
+                    renderWorldBook();
+                    worldbookTitleInput.value = '';
+                    worldbookContentInput.value = '';
+                } else {
+                    alert('标题和内容均不能为空！');
+                }
+            });
+            worldbookEntriesList.addEventListener('click', (event) => {
+                if (event.target.classList.contains('delete-entry-btn')) {
+                    const indexToDelete = parseInt(event.target.getAttribute('data-index'), 10);
+                    if (confirm(`确定要删除条目 "${worldBookEntries[indexToDelete].title}" 吗？`)) {
+                        worldBookEntries.splice(indexToDelete, 1);
+                        saveWorldBook();
+                        renderWorldBook();
+                    }
+                }
+            });
+
+            document.getElementById('phone-app-icon').addEventListener('click', (e) => { e.preventDefault(); alert('电话应用施工中...'); });
+            document.getElementById('camera-app-icon').addEventListener('click', (e) => { e.preventDefault(); alert('相机应用施工中...'); });
+        })();
+    </script>
+</body>
+</html>

@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>消息</title>
+    <link rel="stylesheet" href="qq_lobby_style.css">
+</head>
+<body>
+
+<div id="heads-up-notification" class="heads-up-notification"></div>
+
+<div class="qq-container">
+    <!-- ******** 这里是唯一的修改 ******** -->
+    <header class="top-bar">
+        <div class="left-section">
+            <a href="index.html" class="back-to-home-btn"><</a>
+            <div class="user-info">
+                <div class="avatar-wrapper"><img src="images/default_avatar.png" id="user-avatar" alt="用户头像"></div>
+                <div class="name-status"><span id="user-nickname">请输入ID</span><span class="status">🟢 在线</span></div>
+            </div>
+        </div>
+        <div class="actions">
+            <img src="images/plus_icon.svg" id="plus-button" alt="更多选项">
+            <div id="plus-menu" class="plus-menu"><div class="menu-item" id="create-dialogue-btn">创建对话</div><div class="menu-item" id="create-group-chat-btn">创建群聊</div></div>
+            <div id="create-dialogue-menu" class="create-dialogue-menu"><div id="create-dialogue-menu-list" class="create-dialogue-menu-list"></div></div>
+            <div id="create-group-menu" class="create-group-menu"><div id="create-group-menu-list" class="create-group-menu-list"></div><button id="confirm-group-btn" class="confirm-button" disabled>创建群聊 (0)</button></div>
+        </div>
+        <input type="file" id="avatar-uploader" accept="image/*" style="display: none;">
+    </header>
+    <!-- ******** 修改结束 ******** -->
+
+    <div class="search-bar"><span>🔍 搜索</span></div>
+    <main id="message-list-container" class="message-list"></main>
+    <footer class="bottom-nav">
+        <a href="chat.html" class="nav-item active">消息</a><a href="channels.html" class="nav-item">频道</a><a href="contacts.html" class="nav-item">联系人</a><a href="moments.html" class="nav-item">动态</a>
+    </footer>
+</div>
+
+<div id="context-menu" class="context-menu">
+    <div class="context-menu-item" id="pin-btn">置顶</div>
+    <div class="context-menu-item" id="delete-btn">删除</div>
+</div>
+
+<script>
+(function() {
+    const userAvatar = document.getElementById('user-avatar');
+    const avatarUploader = document.getElementById('avatar-uploader');
+    const userNickname = document.getElementById('user-nickname');
+    const plusButton = document.getElementById('plus-button');
+    const plusMenu = document.getElementById('plus-menu');
+    const createDialogueBtn = document.getElementById('create-dialogue-btn');
+    const createGroupChatBtn = document.getElementById('create-group-chat-btn');
+    const messageListContainer = document.getElementById('message-list-container');
+    const contextMenu = document.getElementById('context-menu');
+    const deleteBtn = document.getElementById('delete-btn');
+    const pinBtn = document.getElementById('pin-btn');
+    const createDialogueMenu = document.getElementById('create-dialogue-menu');
+    const createDialogueMenuList = document.getElementById('create-dialogue-menu-list');
+    const createGroupMenu = document.getElementById('create-group-menu');
+    const createGroupMenuList = document.getElementById('create-group-menu-list');
+    const confirmGroupBtn = document.getElementById('confirm-group-btn');
+    let conversations = JSON.parse(localStorage.getItem('conversations')) || [];
+    let longPressTimer;
+    let selectedConversationIndex = -1;
+    let ignoreNextClick = false;
+
+    function loadUserData() { const savedNickname = localStorage.getItem('userNickname'); const savedAvatar = localStorage.getItem('userAvatar'); if (savedNickname) { userNickname.textContent = savedNickname; } if (savedAvatar) { userAvatar.src = savedAvatar; } }
+
+    function renderMessageList() {
+        messageListContainer.innerHTML = '';
+        if (conversations.length === 0) {
+            messageListContainer.innerHTML = '<p class="empty-message">还没有会话，点击右上角+号创建一个吧</p>';
+        } else {
+            conversations.forEach((chat, index) => {
+                const chatElement = document.createElement('div');
+                chatElement.className = 'message-item';
+                if (chat.isPinned) { chatElement.classList.add('pinned'); }
+                const startLongPress = (e) => { clearTimeout(longPressTimer); selectedConversationIndex = index; longPressTimer = setTimeout(() => { if (e.type === 'touchstart') e.preventDefault(); const pageX = e.type === 'touchstart' ? e.touches[0].pageX : e.pageX; const pageY = e.type === 'touchstart' ? e.touches[0].pageY : e.pageY; showContextMenu(pageX, pageY); ignoreNextClick = true; }, 1000); };
+                const cancelLongPress = () => { clearTimeout(longPressTimer); };
+                chatElement.addEventListener('mousedown', startLongPress);
+                chatElement.addEventListener('mouseup', cancelLongPress);
+                chatElement.addEventListener('mouseleave', cancelLongPress);
+                chatElement.addEventListener('touchstart', startLongPress, { passive: false });
+                chatElement.addEventListener('touchend', cancelLongPress);
+                chatElement.addEventListener('touchmove', cancelLongPress);
+                chatElement.addEventListener('click', (e) => {
+                    if (ignoreNextClick) { e.preventDefault(); e.stopPropagation(); ignoreNextClick = false; return; }
+                    const targetConversation = conversations[index];
+                    if (targetConversation.unreadCount > 0) {
+                        targetConversation.unreadCount = 0;
+                        localStorage.setItem('conversations', JSON.stringify(conversations));
+                    }
+                    const destination = targetConversation.isGroup ? `group_conversation.html?groupId=${targetConversation.id}` : `conversation.html?friendId=${targetConversation.friendId}`;
+                    window.location.href = destination;
+                });
+                let rightContentHTML = '';
+                if (chat.unreadCount && chat.unreadCount > 0) { rightContentHTML = `<div class="right-section"><span class="chat-time">${chat.time}</span><span class="unread-badge">${chat.unreadCount}</span></div>`; } else { rightContentHTML = `<div class="right-section"><span class="chat-time">${chat.time}</span></div>`; }
+                chatElement.innerHTML = `<img src="${chat.avatar}" class="chat-avatar" alt="对话头像"><div class="message-details"><span class="chat-name">${chat.name}</span><div class="last-message">${chat.lastMessage}</div></div>${rightContentHTML}`;
+                messageListContainer.appendChild(chatElement);
+            });
+        }
+    }
+
+    function showContextMenu(x, y) { if (selectedConversationIndex > -1 && conversations[selectedConversationIndex].isPinned) { pinBtn.textContent = '取消置顶'; } else { pinBtn.textContent = '置顶'; } contextMenu.style.left = x + 'px'; contextMenu.style.top = y + 'px'; contextMenu.classList.add('show'); }
+    function hideContextMenu() { contextMenu.classList.remove('show'); }
+    function hideAllMenus() { plusMenu.classList.remove('show'); createDialogueMenu.classList.remove('show'); createGroupMenu.classList.remove('show'); }
+
+    userAvatar.addEventListener('click', () => avatarUploader.click());
+    avatarUploader.addEventListener('change', (event) => { const file = event.target.files[0]; if (file) { const reader = new FileReader(); reader.onload = (e) => { userAvatar.src = e.target.result; localStorage.setItem('userAvatar', e.target.result); }; reader.readAsDataURL(file); } });
+    userNickname.addEventListener('click', () => { const newName = prompt('请输入你的新昵称：', userNickname.textContent); if (newName && newName.trim() !== '') { const finalName = newName.trim(); userNickname.textContent = finalName; localStorage.setItem('userNickname', finalName); } });
+    plusButton.addEventListener('click', (event) => { event.stopPropagation(); hideAllMenus(); plusMenu.classList.toggle('show'); });
+
+    createDialogueBtn.addEventListener('click', (event) => {
+        event.stopPropagation();
+        hideAllMenus();
+        const friends = JSON.parse(localStorage.getItem('friends')) || [];
+        if (friends.length === 0) { alert('您还没有好友，请先到“联系人”页面创建角色！'); return; }
+        createDialogueMenuList.innerHTML = '';
+        friends.forEach(friend => {
+            const friendItem = document.createElement('div');
+            friendItem.className = 'create-dialogue-menu-item';
+            const avatarSrc = friend.avatar || 'images/default_avatar.png';
+            friendItem.innerHTML = `<img src="${avatarSrc}" alt="${friend.name}"><span>${friend.nickname || friend.name}</span>`;
+            friendItem.onclick = () => {
+                const existingConversation = conversations.find(c => !c.isGroup && c.friendId === friend.id);
+                if (existingConversation) { alert(`您已经和 "${friend.nickname || friend.name}" 在聊天了！`); hideAllMenus(); return; }
+                const newChat = { id: 'chat_' + Date.now(), friendId: friend.id, name: friend.nickname || friend.name, avatar: avatarSrc, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }), lastMessage: '你们现在可以开始聊天了...', unreadCount: 0, isPinned: false, isGroup: false };
+                conversations.unshift(newChat);
+                localStorage.setItem('conversations', JSON.stringify(conversations));
+                renderMessageList();
+                hideAllMenus();
+            };
+            createDialogueMenuList.appendChild(friendItem);
+        });
+        createDialogueMenu.classList.toggle('show');
+    });
+
+    createGroupChatBtn.addEventListener('click', (event) => {
+        event.stopPropagation();
+        hideAllMenus();
+        const friends = JSON.parse(localStorage.getItem('friends')) || [];
+        if (friends.length < 2) { alert('您的好友数量不足2人，无法创建群聊！'); return; }
+        createGroupMenuList.innerHTML = '';
+        friends.forEach(friend => {
+            const friendItem = document.createElement('div');
+            friendItem.className = 'create-group-menu-item';
+            const uniqueId = `group-select-${friend.id}`;
+            const avatarSrc = friend.avatar || 'images/default_avatar.png';
+            friendItem.innerHTML = `<input type="checkbox" id="${uniqueId}" value="${friend.id}"><img src="${avatarSrc}" alt="${friend.name}"><label for="${uniqueId}">${friend.nickname || friend.name}</label>`;
+            friendItem.addEventListener('click', (e) => {
+                const checkbox = friendItem.querySelector('input[type="checkbox"]');
+                if (e.target.tagName !== 'INPUT') checkbox.checked = !checkbox.checked;
+                const selectedCount = createGroupMenuList.querySelectorAll('input:checked').length;
+                confirmGroupBtn.disabled = selectedCount < 2;
+                confirmGroupBtn.textContent = `创建群聊 (${selectedCount})`;
+            });
+            createGroupMenuList.appendChild(friendItem);
+        });
+        confirmGroupBtn.disabled = true;
+        confirmGroupBtn.textContent = '创建群聊 (0)';
+        createGroupMenu.classList.toggle('show');
+    });
+
+    confirmGroupBtn.addEventListener('click', (event) => {
+        event.stopPropagation();
+        const selectedCheckboxes = createGroupMenuList.querySelectorAll('input:checked');
+        const groupName = prompt('请输入群聊名称：');
+        if (!groupName || groupName.trim() === '') { alert('群聊名称不能为空！'); return; }
+        const memberIds = Array.from(selectedCheckboxes).map(cb => cb.value);
+        const newGroup = { id: 'group_' + Date.now(), friendIds: memberIds, name: groupName.trim(), avatar: 'images/group_default_icon.svg', time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }), lastMessage: '群聊已创建，开始聊天吧！', unreadCount: 0, isPinned: false, isGroup: true };
+        conversations.unshift(newGroup);
+        localStorage.setItem('conversations', JSON.stringify(conversations));
+        renderMessageList();
+        hideAllMenus();
+    });
+
+    window.addEventListener('click', (event) => {
+        if (!plusButton.contains(event.target) && !plusMenu.contains(event.target) && !createDialogueMenu.contains(event.target) && !createGroupMenu.contains(event.target)) {
+            hideAllMenus();
+        }
+        if (contextMenu.classList.contains('show') && !contextMenu.contains(event.target)) {
+            hideContextMenu();
+        }
+    });
+
+    deleteBtn.addEventListener('click', (event) => { event.stopPropagation(); if (selectedConversationIndex > -1) { const confirmed = confirm(`确定要删除与 "${conversations[selectedConversationIndex].name}" 的对话吗？`); if (confirmed) { conversations.splice(selectedConversationIndex, 1); localStorage.setItem('conversations', JSON.stringify(conversations)); renderMessageList(); } } hideContextMenu(); });
+    pinBtn.addEventListener('click', (event) => { event.stopPropagation(); if (selectedConversationIndex > -1) { conversations[selectedConversationIndex].isPinned = !conversations[selectedConversationIndex].isPinned; conversations.sort((a, b) => (b.isPinned || 0) - (a.isPinned || 0)); localStorage.setItem('conversations', JSON.stringify(conversations)); renderMessageList(); } hideContextMenu(); });
+    loadUserData();
+    renderMessageList();
+})();
+</script>
+</body>
+</html>
