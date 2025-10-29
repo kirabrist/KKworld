@@ -11,10 +11,14 @@
 <div id="heads-up-notification" class="heads-up-notification"></div>
 
 <div class="qq-container">
+    <!-- ******** 这里是唯一的修改 ******** -->
     <header class="top-bar">
-        <div class="user-info">
-            <div class="avatar-wrapper"><img src="images/default_avatar.png" id="user-avatar" alt="用户头像"></div>
-            <div class="name-status"><span id="user-nickname">请输入ID</span><span class="status">🟢 在线</span></div>
+        <div class="left-section">
+            <a href="index.html" class="back-to-home-btn"><</a>
+            <div class="user-info">
+                <div class="avatar-wrapper"><img src="images/default_avatar.png" id="user-avatar" alt="用户头像"></div>
+                <div class="name-status"><span id="user-nickname">请输入ID</span><span class="status">🟢 在线</span></div>
+            </div>
         </div>
         <div class="actions">
             <img src="images/plus_icon.svg" id="plus-button" alt="更多选项">
@@ -24,6 +28,8 @@
         </div>
         <input type="file" id="avatar-uploader" accept="image/*" style="display: none;">
     </header>
+    <!-- ******** 修改结束 ******** -->
+
     <div class="search-bar"><span>🔍 搜索</span></div>
     <main id="message-list-container" class="message-list"></main>
     <footer class="bottom-nav">

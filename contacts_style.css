@@ -9,6 +9,8 @@ main { flex-grow: 1; overflow-y: auto; }
 .sub-nav-item.active::after { content: ''; position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); width: 50%; height: 3px; background-color: #1e90ff; border-radius: 2px; }
 .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.5); display: none; justify-content: center; align-items: center; z-index: 10000; }
 .modal-content { background-color: white; padding: 20px; border-radius: 12px; width: 90%; max-width: 500px; box-shadow: 0 5px 20px rgba(0,0,0,0.2); }
+.modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+.modal-header h2 { margin: 0; text-align: center; flex-grow: 1; }
 .modal-content h2 { margin-top: 0; text-align: center; }
 .modal-content form label { display: block; margin-top: 15px; margin-bottom: 5px; font-weight: bold; }
 .modal-content form input, .modal-content form textarea, .modal-content form select { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; }
@@ -73,58 +75,137 @@ input:checked + .slider:before { transform: translateX(22px); }
 .delete-friend-btn { background-color: #ff4d4f; color: white; }
 .report-link { color: #1e90ff; font-size: 12px; text-decoration: none; margin-top: 5px; }
 
-.group-chat-item {
+.group-chat-item { display: flex; align-items: center; padding: 10px 15px; cursor: pointer; text-decoration: none; color: inherit; border-bottom: 1px solid #f0f0f0; }
+.group-chat-item:hover { background-color: #f9f9f9; }
+.group-chat-avatar { width: 40px; height: 40px; border-radius: 8px; margin-right: 12px; object-fit: cover; background-color: #e0e0e0; }
+.group-chat-name { font-size: 16px; }
+.manage-group-chats-link { display: block; padding: 15px; text-align: center; color: #1e90ff; text-decoration: none; font-size: 15px; border-top: 8px solid #f7f7f7; cursor: pointer; }
+.group-chats-list-manager { max-height: 40vh; overflow-y: auto; }
+.group-chat-manager-item { display: flex; justify-content: space-between; align-items: center; padding: 15px; border-bottom: 1px solid #f0f0f0; }
+.group-chat-manager-item .group-name { font-size: 16px; }
+.group-chat-manager-item .delete-btn { padding: 5px 10px; background-color: #ff4d4f; color: white; border: none; border-radius: 4px; cursor: pointer; }
+
+/* ==================================================================== */
+/* ====== 美化后的、最终的用户人设管理弹窗样式 (替换旧样式) ====== */
+/* ==================================================================== */
+
+#user-persona-modal .form-group {
     display: flex;
-    align-items: center;
-    padding: 10px 15px;
-    cursor: pointer;
-    text-decoration: none;
-    color: inherit;
-    border-bottom: 1px solid #f0f0f0;
+    flex-direction: column;
+    margin-bottom: 20px;
 }
-.group-chat-item:hover {
-    background-color: #f9f9f9;
-}
-.group-chat-avatar {
-    width: 40px;
-    height: 40px;
-    border-radius: 8px;
-    margin-right: 12px;
-    object-fit: cover;
-    background-color: #e0e0e0;
-}
-.group-chat-name {
-    font-size: 16px;
-}
-.manage-group-chats-link {
-    display: block;
-    padding: 15px;
-    text-align: center;
-    color: #1e90ff;
-    text-decoration: none;
+#user-persona-modal .form-group label {
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 8px;
     font-size: 15px;
-    border-top: 8px solid #f7f7f7;
+}
+#user-persona-modal input[type="text"],
+#user-persona-modal textarea {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-size: 16px;
+    box-sizing: border-box;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+#user-persona-modal textarea {
+    resize: vertical;
+    min-height: 100px;
+}
+#user-persona-modal input[type="text"]:focus,
+#user-persona-modal textarea:focus {
+    outline: none;
+    border-color: #1e90ff;
+    box-shadow: 0 0 8px rgba(30, 144, 255, 0.2);
+}
+#user-persona-modal .add-button {
+    width: 100%;
+    padding: 12px;
+    background-color: #1e90ff;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 600;
     cursor: pointer;
+    transition: background-color 0.2s;
 }
-.group-chats-list-manager {
-    max-height: 40vh;
+#user-persona-modal .add-button:hover {
+    background-color: #0073e6;
+}
+.user-persona-manager-list {
+    max-height: 35vh;
     overflow-y: auto;
+    margin-top: 25px;
+    padding-top: 15px;
+    border-top: 1px solid #f0f0f0;
 }
-.group-chat-manager-item {
+.user-persona-item {
+    padding: 15px;
+    background-color: #f9f9f9;
+    border: 1px solid #f0f0f0;
+    border-radius: 12px;
+    margin-bottom: 12px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+.user-persona-item .entry-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 15px;
-    border-bottom: 1px solid #f0f0f0;
 }
-.group-chat-manager-item .group-name {
+.user-persona-item .entry-title {
+    font-weight: bold;
+    color: #2c3e50;
+    margin: 0;
     font-size: 16px;
 }
-.group-chat-manager-item .delete-btn {
-    padding: 5px 10px;
-    background-color: #ff4d4f;
-    color: white;
+.user-persona-item .delete-entry-btn {
+    background: none;
     border: none;
-    border-radius: 4px;
+    font-size: 24px;
+    color: #e74c3c;
     cursor: pointer;
+    transition: transform 0.2s;
+}
+.user-persona-item .delete-entry-btn:hover {
+    transform: scale(1.2);
+}
+.user-persona-item .entry-content {
+    font-size: 14px;
+    color: #555;
+    margin-top: 10px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+/* --- 新增：世界书多选关联区域样式 --- */
+#profile-worldbook-select {
+    max-height: 200px;
+    overflow-y: auto;
+    padding: 5px;
+    border: 1px solid #f0f0f0;
+    border-radius: 8px;
+}
+.worldbook-select-item {
+    display: flex;
+    align-items: center;
+    padding: 8px 5px;
+    cursor: pointer;
+}
+.worldbook-select-item:hover {
+    background-color: #f9f9f9;
+}
+.worldbook-select-item input[type="checkbox"] {
+    margin-right: 10px;
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+}
+.worldbook-select-item label {
+    font-size: 15px;
+    cursor: pointer;
+    flex-grow: 1; /* 让标签占据剩余空间 */
 }

@@ -20,6 +20,24 @@
     <footer class="bottom-nav"><a href="chat.html" class="nav-item">消息</a><a href="channels.html" class="nav-item">频道</a><a href="contacts.html" class="nav-item active">联系人</a><a href="moments.html" class="nav-item">动态</a></footer>
 </div>
 
+<div id="user-persona-modal" class="modal-overlay">
+    <div class="modal-content">
+        <div class="modal-header"><h2>用户人设管理</h2><button id="close-user-persona-btn" class="close-button">×</button></div>
+        <div class="modal-body">
+            <div class="settings-section">
+                <h3>创建新人设</h3>
+                <div class="form-group"><label for="user-persona-title-input">人设名称</label><input type="text" id="user-persona-title-input" placeholder="例如：冷酷的杀手"></div>
+                <div class="form-group"><label for="user-persona-content-input">人设Prompt</label><textarea id="user-persona-content-input" rows="5" placeholder="在此详细描述你扮演的角色的性格、背景、说话方式..."></textarea></div>
+                <button id="add-user-persona-btn" class="add-button">创建人设</button>
+            </div>
+            <div class="settings-section">
+                <h3>已有人设</h3>
+                <div id="user-personas-list" class="user-persona-manager-list"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div id="add-friend-modal" class="modal-overlay">
     <div class="modal-content">
         <h2>创建新角色</h2>
@@ -52,6 +70,15 @@
                 <div id="profile-display-name" class="profile-display-name"></div>
                 <p id="profile-signature" contenteditable="true" data-placeholder="点击设置签名..."></p>
             </div>
+            <div class="card-section">
+                <div class="card-title">关联用户人设</div>
+                <select id="profile-persona-select"></select>
+            </div>
+            <!-- ****** 新增：关联世界书的卡片 ****** -->
+            <div class="card-section">
+                <div class="card-title">关联世界书 (可多选)</div>
+                <div id="profile-worldbook-select"></div>
+            </div>
             <div class="card-section"><div class="card-title">角色分组</div><select id="profile-group-select"></select></div>
             <div class="card-section"><div class="card-title">角色标签 (点击添加/删除)</div><div id="profile-tags-container" class="tags-container"></div></div>
             <details class="card-section"><summary class="card-title">查看/编辑角色人设 (Prompt)</summary><p id="profile-prompt" class="prompt-text" contenteditable="true"></p></details>
@@ -77,6 +104,16 @@
 (function() {
     const mainContentContainer = document.getElementById('main-content-container');
     const userAvatar = document.getElementById('user-avatar');
+    const userPersonaModal = document.getElementById('user-persona-modal');
+    const closeUserPersonaBtn = document.getElementById('close-user-persona-btn');
+    const addUserPersonaBtn = document.getElementById('add-user-persona-btn');
+    const userPersonaTitleInput = document.getElementById('user-persona-title-input');
+    const userPersonaContentInput = document.getElementById('user-persona-content-input');
+    const userPersonasList = document.getElementById('user-personas-list');
+    const profilePersonaSelect = document.getElementById('profile-persona-select');
+    // ****** 新增变量 ******
+    const profileWorldbookSelect = document.getElementById('profile-worldbook-select');
+
     const subNavItems = document.querySelectorAll('.sub-nav-item');
     const addNewFriendBtn = document.getElementById('add-new-friend-btn');
     const addFriendModal = document.getElementById('add-friend-modal');
@@ -109,141 +146,53 @@
     let friends = JSON.parse(localStorage.getItem('friends')) || [];
     let friendGroups = JSON.parse(localStorage.getItem('friendGroups')) || [];
     let conversations = JSON.parse(localStorage.getItem('conversations')) || [];
+    let userPersonas = JSON.parse(localStorage.getItem('userPersonas')) || [];
     let newFriendAvatarData = null;
     let currentEditingFriendId = null;
 
     function loadUserAvatar() { const savedAvatar = localStorage.getItem('userAvatar'); if (savedAvatar) userAvatar.src = savedAvatar; }
-
-    function renderGroupList() {
-        mainContentContainer.innerHTML = '';
-        if (friendGroups.length === 0) {
-            friendGroups = [{ id: 'group_default', name: '我的好友', deletable: false }];
-            localStorage.setItem('friendGroups', JSON.stringify(friendGroups));
-        }
-        friendGroups.forEach(group => {
-            const groupContainer = document.createElement('div');
-            groupContainer.className = 'group-container';
-            const groupHeader = document.createElement('div');
-            groupHeader.className = 'group-item';
-            const friendsInGroup = friends.filter(f => f.groupId === group.id);
-            groupHeader.innerHTML = `<span class="group-arrow">></span><span class="group-name">${group.name}</span><span class="group-count">(${friendsInGroup.length})</span>`;
-            const friendsContainer = document.createElement('div');
-            friendsContainer.className = 'friends-in-group';
-            if (friendsInGroup.length > 0) {
-                friendsInGroup.forEach(friend => {
-                    const friendElement = document.createElement('div');
-                    friendElement.className = 'friend-item';
-                    friendElement.onclick = () => showProfileModal(friend.id);
-                    const avatarSrc = friend.avatar || 'images/default_avatar.png';
-                    friendElement.innerHTML = `<img src="${avatarSrc}" class="friend-avatar" alt="好友头像"><span class="friend-name">${friend.nickname || friend.name}</span>`;
-                    friendsContainer.appendChild(friendElement);
-                });
-            }
-            groupHeader.addEventListener('click', () => groupContainer.classList.toggle('open'));
-            groupContainer.appendChild(groupHeader);
-            groupContainer.appendChild(friendsContainer);
-            mainContentContainer.appendChild(groupContainer);
-        });
-        const manageGroupsElement = document.createElement('div');
-        manageGroupsElement.className = 'manage-groups-link';
-        manageGroupsElement.textContent = '分组管理';
-        manageGroupsElement.onclick = () => { renderGroupsInManager(); manageGroupsModal.style.display = 'flex'; };
-        mainContentContainer.appendChild(manageGroupsElement);
-    }
-
-    function renderGroupChatList() {
-        mainContentContainer.innerHTML = '';
-        conversations = JSON.parse(localStorage.getItem('conversations')) || [];
-        const groupChats = conversations.filter(c => c.isGroup);
-        if (groupChats.length === 0) {
-            mainContentContainer.innerHTML = '<p class="empty-message">还没有群聊</p>';
-        } else {
-            groupChats.forEach(groupChat => {
-                const groupChatElement = document.createElement('a');
-                groupChatElement.className = 'group-chat-item';
-                groupChatElement.href = `group_conversation.html?groupId=${groupChat.id}`;
-                const avatarSrc = groupChat.avatar || 'images/group_default_icon.svg';
-                groupChatElement.innerHTML = `<img src="${avatarSrc}" class="group-chat-avatar" alt="群聊头像"><span class="group-chat-name">${groupChat.name}</span>`;
-                mainContentContainer.appendChild(groupChatElement);
-            });
-        }
-        const manageLink = document.createElement('div');
-        manageLink.className = 'manage-group-chats-link';
-        manageLink.textContent = '群聊管理';
-        manageLink.onclick = () => { renderGroupChatsInManager(); manageGroupChatsModal.style.display = 'flex'; };
-        mainContentContainer.appendChild(manageLink);
-    }
-
-    function switchTab(tabName) {
-        if (tabName === 'groups') {
-            renderGroupList();
-        } else if (tabName === 'group-chats') {
-            renderGroupChatList();
-        }
-    }
+    function saveUserPersonas() { localStorage.setItem('userPersonas', JSON.stringify(userPersonas)); }
+    function renderUserPersonas() { userPersonasList.innerHTML = ''; if (userPersonas.length === 0) { userPersonasList.innerHTML = '<p class="empty-message">还没有任何人设。</p>'; return; } userPersonas.forEach((persona, index) => { const entryDiv = document.createElement('div'); entryDiv.className = 'user-persona-item'; entryDiv.innerHTML = `<div class="entry-header"><h4 class="entry-title">${persona.title}</h4><button class="delete-entry-btn" data-index="${index}">×</button></div><p class="entry-content">${persona.content.replace(/\n/g, '<br>')}</p>`; userPersonasList.appendChild(entryDiv); }); }
+    function openUserPersonaModal() { renderUserPersonas(); userPersonaModal.style.display = 'flex'; }
+    function renderGroupList() { mainContentContainer.innerHTML = ''; if (friendGroups.length === 0) { friendGroups = [{ id: 'group_default', name: '我的好友', deletable: false }]; localStorage.setItem('friendGroups', JSON.stringify(friendGroups)); } friendGroups.forEach(group => { const groupContainer = document.createElement('div'); groupContainer.className = 'group-container'; const groupHeader = document.createElement('div'); groupHeader.className = 'group-item'; const friendsInGroup = friends.filter(f => f.groupId === group.id); groupHeader.innerHTML = `<span class="group-arrow">></span><span class="group-name">${group.name}</span><span class="group-count">(${friendsInGroup.length})</span>`; const friendsContainer = document.createElement('div'); friendsContainer.className = 'friends-in-group'; if (friendsInGroup.length > 0) { friendsInGroup.forEach(friend => { const friendElement = document.createElement('div'); friendElement.className = 'friend-item'; friendElement.onclick = () => showProfileModal(friend.id); const avatarSrc = friend.avatar || 'images/default_avatar.png'; friendElement.innerHTML = `<img src="${avatarSrc}" class="friend-avatar" alt="好友头像"><span class="friend-name">${friend.nickname || friend.name}</span>`; friendsContainer.appendChild(friendElement); }); } groupHeader.addEventListener('click', () => groupContainer.classList.toggle('open')); groupContainer.appendChild(groupHeader); groupContainer.appendChild(friendsContainer); mainContentContainer.appendChild(groupContainer); }); const manageGroupsElement = document.createElement('div'); manageGroupsElement.className = 'manage-groups-link'; manageGroupsElement.textContent = '分组管理'; manageGroupsElement.onclick = () => { renderGroupsInManager(); manageGroupsModal.style.display = 'flex'; }; mainContentContainer.appendChild(manageGroupsElement); }
+    function renderGroupChatList() { mainContentContainer.innerHTML = ''; conversations = JSON.parse(localStorage.getItem('conversations')) || []; const groupChats = conversations.filter(c => c.isGroup); if (groupChats.length === 0) { mainContentContainer.innerHTML = '<p class="empty-message">还没有群聊</p>'; } else { groupChats.forEach(groupChat => { const groupChatElement = document.createElement('a'); groupChatElement.className = 'group-chat-item'; groupChatElement.href = `group_conversation.html?groupId=${groupChat.id}`; const avatarSrc = groupChat.avatar || 'images/group_default_icon.svg'; groupChatElement.innerHTML = `<img src="${avatarSrc}" class="group-chat-avatar" alt="群聊头像"><span class="group-chat-name">${groupChat.name}</span>`; mainContentContainer.appendChild(groupChatElement); }); } const manageLink = document.createElement('div'); manageLink.className = 'manage-group-chats-link'; manageLink.textContent = '群聊管理'; manageLink.onclick = () => { renderGroupChatsInManager(); manageGroupChatsModal.style.display = 'flex'; }; mainContentContainer.appendChild(manageLink); }
+    function switchTab(tabName) { if (tabName === 'groups') { renderGroupList(); } else if (tabName === 'group-chats') { renderGroupChatList(); } }
     subNavItems.forEach(tab => { tab.addEventListener('click', () => { subNavItems.forEach(t => t.classList.remove('active')); tab.classList.add('active'); switchTab(tab.dataset.tab); }); });
     function populateGroupSelect(selectElement) { selectElement.innerHTML = ''; friendGroups.forEach(group => { const option = document.createElement('option'); option.value = group.id; option.textContent = group.name; selectElement.appendChild(option); }); }
+    function populatePersonaSelect(selectElement) { selectElement.innerHTML = '<option value="">默认 (无特定人设)</option>'; userPersonas.forEach(persona => { const option = document.createElement('option'); option.value = persona.id; option.textContent = persona.title; selectElement.appendChild(option); }); }
+
+    // ****** 新增：填充世界书多选列表的函数 ******
+    function populateWorldbookSelect(container, linkedIds = []) {
+        const allWorldbookEntries = JSON.parse(localStorage.getItem('hakimi-os-worldbook')) || [];
+        container.innerHTML = '';
+        if (allWorldbookEntries.length === 0) {
+            container.innerHTML = '<p class="empty-message" style="margin-top: 10px;">没有可用的世界书条目</p>';
+            return;
+        }
+        allWorldbookEntries.forEach(entry => {
+            const itemDiv = document.createElement('div');
+            itemDiv.className = 'worldbook-select-item';
+            const isChecked = linkedIds.includes(entry.id);
+            itemDiv.innerHTML = `
+                <input type="checkbox" id="wb-select-${entry.id}" value="${entry.id}" ${isChecked ? 'checked' : ''}>
+                <label for="wb-select-${entry.id}">${entry.title}</label>
+            `;
+            container.appendChild(itemDiv);
+        });
+    }
+
     addNewFriendBtn.addEventListener('click', () => { if (friendGroups.length === 0) renderGroupList(); populateGroupSelect(friendGroupSelect); addFriendModal.style.display = 'flex'; });
     cancelAddFriendBtn.addEventListener('click', () => addFriendModal.style.display = 'none');
     addFriendModal.addEventListener('click', (e) => { if (e.target === addFriendModal) addFriendModal.style.display = 'none'; });
     triggerAvatarUploadBtn.addEventListener('click', () => avatarUploadInput.click());
     avatarUploadInput.addEventListener('change', (event) => { const file = event.target.files[0]; if (file) { const reader = new FileReader(); reader.onload = (e) => { avatarPreview.src = e.target.result; newFriendAvatarData = e.target.result; }; reader.readAsDataURL(file); } });
-    addFriendForm.addEventListener('submit', (event) => {
-        event.preventDefault();
-        const tagsInput = document.getElementById('friend-tags').value;
-        const tagsArray = tagsInput ? tagsInput.split(',').map(tag => tag.trim()).filter(Boolean).slice(0, 5) : [];
-        const newFriend = { id: 'friend_' + Date.now(), name: document.getElementById('friend-name').value, nickname: document.getElementById('friend-nickname').value, groupId: friendGroupSelect.value, tags: tagsArray, signature: "", isBlacklisted: false, prompt: document.getElementById('friend-prompt').value, avatar: newFriendAvatarData };
-        friends.push(newFriend);
-        localStorage.setItem('friends', JSON.stringify(friends));
-        if (document.querySelector('.sub-nav-item.active').dataset.tab === 'groups') { renderGroupList(); }
-        addFriendForm.reset();
-        avatarPreview.src = 'images/default_avatar.png';
-        newFriendAvatarData = null;
-        addFriendModal.style.display = 'none';
-    });
+    addFriendForm.addEventListener('submit', (event) => { event.preventDefault(); const tagsInput = document.getElementById('friend-tags').value; const tagsArray = tagsInput ? tagsInput.split(',').map(tag => tag.trim()).filter(Boolean).slice(0, 5) : []; const newFriend = { id: 'friend_' + Date.now(), name: document.getElementById('friend-name').value, nickname: document.getElementById('friend-nickname').value, groupId: friendGroupSelect.value, tags: tagsArray, signature: "", isBlacklisted: false, prompt: document.getElementById('friend-prompt').value, avatar: newFriendAvatarData }; friends.push(newFriend); localStorage.setItem('friends', JSON.stringify(friends)); if (document.querySelector('.sub-nav-item.active').dataset.tab === 'groups') { renderGroupList(); } addFriendForm.reset(); avatarPreview.src = 'images/default_avatar.png'; newFriendAvatarData = null; addFriendModal.style.display = 'none'; });
     function renderGroupsInManager() { groupsListManager.innerHTML = ''; friendGroups.forEach((group, index) => { const groupItem = document.createElement('div'); groupItem.className = 'group-manager-item'; let deleteButtonHTML = group.deletable ? `<button class="delete-btn" data-index="${index}">删除</button>` : ''; groupItem.innerHTML = `<span class="group-name">${group.name}</span>${deleteButtonHTML}`; groupsListManager.appendChild(groupItem); }); }
     closeManageGroupsBtn.addEventListener('click', () => { manageGroupsModal.style.display = 'none'; if (document.querySelector('.sub-nav-item.active').dataset.tab === 'groups') renderGroupList(); });
     addGroupBtn.addEventListener('click', () => { const newName = newGroupNameInput.value.trim(); if (newName) { friendGroups.push({ id: 'group_' + Date.now(), name: newName, deletable: true }); localStorage.setItem('friendGroups', JSON.stringify(friendGroups)); renderGroupsInManager(); newGroupNameInput.value = ''; } });
-    groupsListManager.addEventListener('click', (event) => {
-        if (event.target.classList.contains('delete-btn')) {
-            const indexToDelete = parseInt(event.target.dataset.index, 10);
-            const groupNameToDelete = friendGroups[indexToDelete].name;
-            if (confirm(`确定要删除分组 "${groupNameToDelete}" 吗？该分组下的好友将移至默认分组。`)) {
-                const deletedGroupId = friendGroups[indexToDelete].id;
-                friends.forEach(friend => { if(friend.groupId === deletedGroupId) friend.groupId = friendGroups[0].id; });
-                localStorage.setItem('friends', JSON.stringify(friends));
-                friendGroups.splice(indexToDelete, 1);
-                localStorage.setItem('friendGroups', JSON.stringify(friendGroups));
-                renderGroupsInManager();
-            }
-        }
-    });
-    function renderGroupChatsInManager() {
-        groupChatsListManager.innerHTML = '';
-        conversations = JSON.parse(localStorage.getItem('conversations')) || [];
-        const groupChats = conversations.filter(c => c.isGroup);
-        if (groupChats.length === 0) {
-            groupChatsListManager.innerHTML = '<p class="empty-message">没有群聊可管理</p>';
-        } else {
-            groupChats.forEach(groupChat => {
-                const item = document.createElement('div');
-                item.className = 'group-chat-manager-item';
-                item.innerHTML = `<span class="group-name">${groupChat.name}</span><button class="delete-btn" data-id="${groupChat.id}">删除</button>`;
-                groupChatsListManager.appendChild(item);
-            });
-        }
-    }
-    groupChatsListManager.addEventListener('click', (event) => {
-        if (event.target.classList.contains('delete-btn')) {
-            const idToDelete = event.target.dataset.id;
-            const groupChatToDelete = conversations.find(c => c.id === idToDelete);
-            if (groupChatToDelete && confirm(`确定要解散群聊 "${groupChatToDelete.name}" 吗？`)) {
-                conversations = conversations.filter(c => c.id !== idToDelete);
-                localStorage.setItem('conversations', JSON.stringify(conversations));
-                renderGroupChatsInManager();
-            }
-        }
-    });
+    groupsListManager.addEventListener('click', (event) => { if (event.target.classList.contains('delete-btn')) { const indexToDelete = parseInt(event.target.dataset.index, 10); const groupNameToDelete = friendGroups[indexToDelete].name; if (confirm(`确定要删除分组 "${groupNameToDelete}" 吗？该分组下的好友将移至默认分组。`)) { const deletedGroupId = friendGroups[indexToDelete].id; friends.forEach(friend => { if(friend.groupId === deletedGroupId) friend.groupId = friendGroups[0].id; }); localStorage.setItem('friends', JSON.stringify(friends)); friendGroups.splice(indexToDelete, 1); localStorage.setItem('friendGroups', JSON.stringify(friendGroups)); renderGroupsInManager(); } } });
+    function renderGroupChatsInManager() { groupChatsListManager.innerHTML = ''; conversations = JSON.parse(localStorage.getItem('conversations')) || []; const groupChats = conversations.filter(c => c.isGroup); if (groupChats.length === 0) { groupChatsListManager.innerHTML = '<p class="empty-message">没有群聊可管理</p>'; } else { groupChats.forEach(groupChat => { const item = document.createElement('div'); item.className = 'group-chat-manager-item'; item.innerHTML = `<span class="group-name">${groupChat.name}</span><button class="delete-btn" data-id="${groupChat.id}">删除</button>`; groupChatsListManager.appendChild(item); }); } }
+    groupChatsListManager.addEventListener('click', (event) => { if (event.target.classList.contains('delete-btn')) { const idToDelete = event.target.dataset.id; const groupChatToDelete = conversations.find(c => c.id === idToDelete); if (groupChatToDelete && confirm(`确定要解散群聊 "${groupChatToDelete.name}" 吗？`)) { conversations = conversations.filter(c => c.id !== idToDelete); localStorage.setItem('conversations', JSON.stringify(conversations)); renderGroupChatsInManager(); } } });
     closeManageGroupChatsBtn.addEventListener('click', () => { manageGroupChatsModal.style.display = 'none'; renderGroupChatList(); });
 
     function showProfileModal(friendId) {
@@ -258,12 +207,18 @@
         blacklistToggle.checked = friend.isBlacklisted || false;
         populateGroupSelect(profileGroupSelect);
         profileGroupSelect.value = friend.groupId;
+        populatePersonaSelect(profilePersonaSelect);
+        profilePersonaSelect.value = friend.linkedPersonaId || '';
+        // ****** 新增调用 ******
+        populateWorldbookSelect(profileWorldbookSelect, friend.linkedWorldbookIds || []);
         renderProfileTags(friend.tags || []);
         profileModal.style.display = 'flex';
     }
+
     function renderProfileTags(tags) { profileTagsContainer.innerHTML = ''; tags.forEach(tagText => { const tagElement = document.createElement('span'); tagElement.className = 'tag'; tagElement.textContent = tagText; tagElement.onclick = () => removeTag(tagText); profileTagsContainer.appendChild(tagElement); }); if (tags.length < 5) { const addTagElement = document.createElement('span'); addTagElement.className = 'tag add-tag'; addTagElement.textContent = '+'; addTagElement.onclick = addNewTag; profileTagsContainer.appendChild(addTagElement); } }
     function addNewTag() { const newTag = prompt('请输入新标签:'); if (newTag && newTag.trim() !== '') { const friend = friends.find(f => f.id === currentEditingFriendId); if (friend) { if (!friend.tags) friend.tags = []; if (friend.tags.length < 5) { friend.tags.push(newTag.trim()); saveCurrentFriendData(false); renderProfileTags(friend.tags); } else { alert('最多只能添加5个标签。'); } } } }
     function removeTag(tagToRemove) { const friend = friends.find(f => f.id === currentEditingFriendId); if (friend && friend.tags) { friend.tags = friend.tags.filter(tag => tag !== tagToRemove); saveCurrentFriendData(false); renderProfileTags(friend.tags); } }
+
     function saveCurrentFriendData(shouldReloadList = true) {
         if (!currentEditingFriendId) return;
         const friendIndex = friends.findIndex(f => f.id === currentEditingFriendId);
@@ -274,24 +229,24 @@
             friends[friendIndex].groupId = profileGroupSelect.value;
             friends[friendIndex].prompt = profilePrompt.textContent;
             friends[friendIndex].isBlacklisted = blacklistToggle.checked;
+            friends[friendIndex].linkedPersonaId = profilePersonaSelect.value;
+
+            // ****** 新增保存逻辑 ******
+            const selectedWorldbookCheckboxes = profileWorldbookSelect.querySelectorAll('input[type="checkbox"]:checked');
+            friends[friendIndex].linkedWorldbookIds = Array.from(selectedWorldbookCheckboxes).map(cb => cb.value);
+
             localStorage.setItem('friends', JSON.stringify(friends));
             if (shouldReloadList) renderGroupList();
         }
     }
     profileBackButton.addEventListener('click', (e) => { e.preventDefault(); saveCurrentFriendData(); profileModal.style.display = 'none'; });
     deleteFriendBtn.addEventListener('click', () => { const friend = friends.find(f => f.id === currentEditingFriendId); if (confirm(`确定要删除好友 "${friend.name}" 吗？此操作不可逆！`)) { friends = friends.filter(f => f.id !== currentEditingFriendId); localStorage.setItem('friends', JSON.stringify(friends)); profileModal.style.display = 'none'; renderGroupList(); } });
-    sendMessageBtn.addEventListener('click', () => {
-        saveCurrentFriendData(false);
-        const friend = friends.find(f => f.id === currentEditingFriendId);
-        let conversation = conversations.find(c => !c.isGroup && c.friendId === currentEditingFriendId);
-        if(!conversation) {
-            conversation = { id: 'chat_' + Date.now(), friendId: friend.id, name: friend.nickname || friend.name, avatar: friend.avatar || 'images/default_avatar.png', time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }), lastMessage: '你们现在可以开始聊天了...', unreadCount: 0, isPinned: false, isGroup: false };
-            conversations.unshift(conversation);
-            localStorage.setItem('conversations', JSON.stringify(conversations));
-        }
-        window.location.href = `conversation.html?friendId=${currentEditingFriendId}`;
-    });
-
+    sendMessageBtn.addEventListener('click', () => { saveCurrentFriendData(false); const friend = friends.find(f => f.id === currentEditingFriendId); let conversation = conversations.find(c => !c.isGroup && c.friendId === currentEditingFriendId); if(!conversation) { conversation = { id: 'chat_' + Date.now(), friendId: friend.id, name: friend.nickname || friend.name, avatar: friend.avatar || 'images/default_avatar.png', time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }), lastMessage: '你们现在可以开始聊天了...', unreadCount: 0, isPinned: false, isGroup: false }; conversations.unshift(conversation); localStorage.setItem('conversations', JSON.stringify(conversations)); } window.location.href = `conversation.html?friendId=${currentEditingFriendId}`; });
+    userAvatar.addEventListener('click', openUserPersonaModal);
+    closeUserPersonaBtn.addEventListener('click', () => userPersonaModal.style.display = 'none');
+    userPersonaModal.addEventListener('click', (e) => { if(e.target === userPersonaModal) userPersonaModal.style.display = 'none'; });
+    addUserPersonaBtn.addEventListener('click', () => { const title = userPersonaTitleInput.value.trim(); const content = userPersonaContentInput.value.trim(); if (title && content) { userPersonas.unshift({ id: 'persona_' + Date.now(), title, content }); saveUserPersonas(); renderUserPersonas(); userPersonaTitleInput.value = ''; userPersonaContentInput.value = ''; } else { alert('人设名称和Prompt均不能为空！'); } });
+    userPersonasList.addEventListener('click', (event) => { if (event.target.classList.contains('delete-entry-btn')) { const indexToDelete = parseInt(event.target.getAttribute('data-index'), 10); if (confirm(`确定要删除人设 "${userPersonas[indexToDelete].title}" 吗？`)) { userPersonas.splice(indexToDelete, 1); saveUserPersonas(); renderUserPersonas(); } } });
     loadUserAvatar();
     switchTab('groups');
 })();
